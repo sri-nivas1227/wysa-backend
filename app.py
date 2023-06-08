@@ -6,9 +6,11 @@ from dotenv import load_dotenv
 import os
 from password import hash_password, verify_password
 import jwt
+from flask_cors import CORS
 from datetime import datetime, timedelta
 
 load_dotenv()
+
 
 uri = os.getenv("MONGO_CONNECTION_STRING")
 # Create a new client and connect to the server
@@ -25,8 +27,9 @@ sleep_assessment_collection = sleep_db.sleep_assessment_collection
 user_collection = sleep_db.user_collection
 sleep_assessment_collection.create_index("username", unique=True)
 user_collection.create_index("username", unique=True)
-app = Flask(__name__)
 
+app = Flask(__name__)
+CORS(app,  resources={r"/*": {"origins": "*"}})
 
 @app.route("/")
 def hello_world():
@@ -92,13 +95,17 @@ def struggle_period():
                 score = 6
             elif sleep_struggle_period == ">8":
                 score = 2
-            sleep_assessment_collection.insert_one(
-                {
-                    "username": username,
-                    "sleep_struggle_period": sleep_struggle_period,
-                    "score": score,
-                }
-            )
+            user_data = sleep_assessment_collection.find_one({"username": username})
+            if user_data:
+                sleep_assessment_collection.update_one({"username" : username}, {"$set" : {"sleep_struggle_period" : sleep_struggle_period, "score" : score}})
+            else:
+                sleep_assessment_collection.insert_one(
+                    {
+                        "username": username,
+                        "sleep_struggle_period": sleep_struggle_period,
+                        "score": score,
+                    }
+                )
             return jsonify({"status": "success"}), 200
         except Exception as e:
             print(e)
@@ -141,6 +148,7 @@ def handle_sleep_time():
                 200,
             )
         except Exception as e:
+            print(e)
             return (
                 jsonify(
                     {
@@ -175,10 +183,12 @@ def handle_waking_time():
             sleeping_time = user["sleeping_time"]
             # estimating sleep hours
             sleeping_time_obj = datetime.strptime(sleeping_time, "%H:%M")
+            print(sleeping_time_obj)
             waking_time_obj = datetime.strptime(waking_time, "%H:%M")
-            sleep_hours = int((waking_time_obj - sleeping_time_obj).seconds / 3600)
+            sleep_hours = waking_time_obj - sleeping_time_obj
+            send_hours = int(sleep_hours.seconds/3600)
             return (
-                jsonify({"status": "success", "estimated_sleep_hours": sleep_hours}),
+                jsonify({"status": "success", "estimated_sleep_hours": send_hours}),
                 200,
             )
         except Exception as e:
